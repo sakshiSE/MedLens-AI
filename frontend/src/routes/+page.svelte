@@ -1,6 +1,6 @@
 <script>
   import { Activity, ArrowRight, ArrowUpRight, Check, ChevronDown, ClipboardList, FileImage, HeartPulse, Menu, Microscope, Pill, ScanLine, ShieldCheck, Sparkles, Stethoscope, UploadCloud, X, Zap } from 'lucide-svelte';
-  const API = 'http://127.0.0.1:8000/api';
+  const API = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api';
   let file = null, preview = '', imageData = '', ocrText = '', conditions = 'diabetes', medications = '', allergies = '';
   let identity = null, matchConfirmed = false;
   let busy = false, message = '', report = null, dragOver = false, mobileMenu = false;
