@@ -1,0 +1,14 @@
+.env
+.venv/
+venv/
+__pycache__/
+.pytest_cache/
+*.py[cod]
+frontend/node_modules/
+frontend/.svelte-kit/
+frontend/build/
+backend/uploads/*
+!backend/uploads/.gitkeep
+*.faiss
+*.index
+.DS_Store

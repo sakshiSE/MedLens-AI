@@ -1,0 +1,4 @@
+Source: U.S. Food and Drug Administration, openFDA Drug Product Labeling API documentation.
+URL: https://open.fda.gov/apis/drug/label/
+
+The API provides drug labeling submitted by manufacturers and distributors in Structured Product Labeling format. The FDA notes that openFDA reformats this information and that the content has not been verified by FDA. openFDA also explicitly advises users not to rely on it for medical-care decisions and to speak with a healthcare provider. This project uses static source links for its local demo catalogue and does not treat API availability as clinical verification.

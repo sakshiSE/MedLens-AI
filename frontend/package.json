@@ -1,0 +1,9 @@
+{
+  "name": "medlens-ai-frontend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {"dev": "vite dev --host 127.0.0.1", "build": "vite build", "preview": "vite preview --host 127.0.0.1"},
+  "dependencies": {"@sveltejs/adapter-auto": "^6.0.0", "@sveltejs/kit": "^2.20.0", "@sveltejs/vite-plugin-svelte": "^5.0.0", "lucide-svelte": "^0.468.0", "svelte": "^5.0.0", "vite": "^6.0.0"},
+  "devDependencies": {"@types/node": "^22.0.0"}
+}

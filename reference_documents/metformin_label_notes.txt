@@ -1,0 +1,7 @@
+Source: DailyMed, METFORMIN HYDROCHLORIDE tablet, label set ID 55b25f66-a0a3-4e2e-9c4a-6354f41072fa
+URL: https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=55b25f66-a0a3-4e2e-9c4a-6354f41072fa
+Evidence status: Extracted summary of specific label sections for an educational demonstration. Always inspect the current label for the exact dispensed product.
+
+The referenced metformin label lists severe renal impairment (eGFR below 30 mL/min/1.73 m2), hypersensitivity to metformin, and acute or chronic metabolic acidosis including diabetic ketoacidosis as contraindications. The label says initiation is not recommended for eGFR 30 to 45 and recommends assessing risks and benefits if eGFR falls below 45. The app cannot measure or infer kidney function.
+
+The label warns that concomitant use with insulin or an insulin secretagogue increases the risk of hypoglycemia. This does not determine an individual's risk and is not a reason to change medication without a clinician.

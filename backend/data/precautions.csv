@@ -1,0 +1,2 @@
+ingredient,condition,finding,source,verification
+metformin,renal impairment,"The referenced product label states metformin is contraindicated in severe renal impairment (eGFR below 30 mL/min/1.73 m²); initiation is not recommended for eGFR 30–45. A user's renal status cannot be assessed by this app.",https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=55b25f66-a0a3-4e2e-9c4a-6354f41072fa,Label excerpt reviewed; verify current exact product label

@@ -1,0 +1,3 @@
+ingredient_a,ingredient_b,finding,category,source,verification
+metformin,insulin,"The metformin label reports increased risk of hypoglycemia when used with insulin or insulin secretagogues. This is a label warning, not a patient-specific risk estimate.","Label warning",https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=55b25f66-a0a3-4e2e-9c4a-6354f41072fa,Label excerpt reviewed; verify current exact product label
+amoxicillin,allopurinol,"The amoxicillin label states concomitant use with allopurinol increases the risk of rash.","Label interaction",https://dailymed.nlm.nih.gov/dailymed/lookup.cfm?setid=110ba6b1-f175-48a1-8e30-616c02212538,Label excerpt reviewed; verify current exact product label
