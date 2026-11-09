@@ -5,6 +5,9 @@
   let identity = null, matchConfirmed = false;
   let busy = false, message = '', report = null, dragOver = false, mobileMenu = false;
   let fileInput;
+  let medicineQuery = '';
+  let manualMatch = null;
+  let manualSearchBusy = false;
   const steps = [
     { icon: FileImage, title: 'Upload a label', desc: 'Add a clear photo of the medicine packaging or label.' },
     { icon: ScanLine, title: 'Extract the text', desc: 'OCR reads visible names, ingredients and strengths.' },
@@ -29,7 +32,7 @@
   async function runOcr() {
     if (!file) { message = 'Choose an image first.'; return; }
     busy = true; message = 'Reading the label…';
-    try { const body = new FormData(); body.append('file', file); const res = await fetch(`${API}/ocr`, { method: 'POST', body }); const data = await res.json(); if (!res.ok) throw new Error(data.detail || 'OCR request failed'); ocrText = data.text || ''; message = data.warning || 'OCR complete. Review the extracted text carefully.'; }
+    try { const body = new FormData(); body.append('file', file); const res = await fetch(`${API_URL}/api/ocr`, { method: 'POST', body }); const data = await res.json(); if (!res.ok) throw new Error(data.detail || 'OCR request failed'); ocrText = data.text || ''; message = data.warning || 'OCR complete. Review the extracted text carefully.'; }
     catch (e) { message = `Could not connect to the backend: ${e.message}`; }
     finally { busy = false; }
   }
@@ -52,6 +55,87 @@
     if (!report) return;
     try { const res = await fetch(`${API}/report.pdf`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({...report, image_data:imageData}) }); if (!res.ok) throw new Error('PDF export failed'); const blob = await res.blob(); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href=url; a.download='medlens-report.pdf'; a.click(); URL.revokeObjectURL(url); }
     catch(e) { message = e.message; }
+  }
+  async function searchMedicine() {
+    if (medicineQuery.trim().length < 2) {
+        message = 'Enter a medicine name first.';
+        return;
+    }
+
+    manualSearchBusy = true;
+    message = 'Searching the Indian medicine catalogue...';
+    manualMatch = null;
+    report = null;
+
+    try {
+        const res = await fetch(`${API}/medicine-search`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                medicine_name: medicineQuery.trim(),
+                conditions: conditions.split(',').map(x => x.trim()).filter(Boolean),
+                medications: medications.split(',').map(x => x.trim()).filter(Boolean),
+                allergies: allergies.split(',').map(x => x.trim()).filter(Boolean)
+            })
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+            throw new Error(data.detail || 'Medicine search failed.');
+        }
+
+        manualMatch = data;
+
+        message = data.matched
+            ? 'Possible medicine match found. Verify the name and ingredients.'
+            : data.message || 'No matching medicine found.';
+    } catch (e) {
+        message = `Medicine search failed: ${e.message}`;
+    } finally {
+        manualSearchBusy = false;
+    }
+  }
+  async function confirmManualMedicine() {
+    if (!manualMatch?.medicine?.name) {
+        message = 'Search for a medicine first.';
+        return;
+    }
+
+    manualSearchBusy = true;
+    message = 'Retrieving ingredient information and checking precautions...';
+    report = null;
+
+    try {
+        const res = await fetch(`${API}/medicine-search`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                medicine_name: medicineQuery.trim(),
+                confirmed_medicine: manualMatch.medicine.name,
+                conditions: conditions.split(',').map(x => x.trim()).filter(Boolean),
+                medications: medications.split(',').map(x => x.trim()).filter(Boolean),
+                allergies: allergies.split(',').map(x => x.trim()).filter(Boolean)
+            })
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+            throw new Error(data.detail || 'Medicine analysis failed.');
+        }
+
+        if (!data.match_confirmed) {
+            throw new Error(data.message || 'Medicine confirmation failed.');
+        }
+
+        report = data;
+        message = 'Medicine information and evidence report is ready.';
+    } catch (e) {
+        message = `Analysis failed: ${e.message}`;
+    } finally {
+        manualSearchBusy = false;
+    }
   }
   function clearImage() { file=null; preview=''; imageData=''; ocrText=''; identity=null; matchConfirmed=false; report=null; message='Image removed.'; if(fileInput) fileInput.value=''; }
 </script>
@@ -89,9 +173,110 @@
     <div class="panel scanner-panel"><div class="panel-title"><span class="panel-icon"><UploadCloud size={19}/></span><div><h3>01. Upload medicine label</h3><p>JPG or PNG · Maximum 8 MB</p></div><span class="panel-step">STEP 01</span></div>
       {#if !preview}<div class:dragging={dragOver} class="drop-zone" ondragover={(e)=>{e.preventDefault();dragOver=true;}} ondragleave={()=>dragOver=false} ondrop={onDrop}><div class="upload-icon"><UploadCloud size={27}/></div><h4>Drop your medicine image here</h4><p>or browse files from your device</p><button class="btn btn-outline" onclick={()=>fileInput?.click()}>Choose image</button><input bind:this={fileInput} type="file" accept="image/png,image/jpeg" hidden onchange={(e)=>chooseFile(e.currentTarget.files?.[0])}/></div>{:else}<div class="preview-row"><img src={preview} alt="Uploaded medicine label preview"/><div class="preview-info"><b>{file?.name}</b><span>{(file?.size/1024).toFixed(0)} KB · Ready to scan</span><button class="remove-btn" onclick={clearImage}><X size={14}/> Remove image</button></div><button class="btn btn-teal" disabled={busy} onclick={runOcr}>{#if busy}<span class="spinner"></span>{:else}<ScanLine size={16}/>{/if} Extract text</button></div>{/if}
     </div>
+    <div class="panel scanner-panel manual-search-panel">
+    <div class="panel-title">
+        <span class="panel-icon"><Pill size={19}/></span>
+        <div>
+            <h3>Search medicine by name</h3>
+            <p>Look up a medicine without uploading an image.</p>
+        </div>
+        <span class="panel-step">MANUAL SEARCH</span>
+    </div>
+
+    <label>
+        Medicine name
+        <input
+            bind:value={medicineQuery}
+            oninput={() => { manualMatch = null; report = null; }}
+            placeholder="e.g. Augmentin 625"
+        />
+    </label>
+
+    <button
+        class="btn btn-teal"
+        disabled={manualSearchBusy}
+        onclick={searchMedicine}
+    >
+        {#if manualSearchBusy}
+            <span class="spinner"></span> Searching...
+        {:else}
+            <Pill size={16}/> Search medicine
+        {/if}
+    </button>
+
+    {#if manualMatch?.matched}
+        <div class="identity-result">
+            <b>{manualMatch.medicine.name}</b>
+            <span>
+                Catalogue match · Similarity:
+                {Math.round(manualMatch.confidence * 100)}%
+            </span>
+
+            <p>
+                <b>Ingredients:</b>
+                {manualMatch.ingredients.join(', ') || 'Not listed'}
+            </p>
+
+            <p>
+                Verify the exact brand, strength and composition against
+                your medicine packaging before continuing.
+            </p>
+
+            <button
+                class="btn btn-teal"
+                disabled={manualSearchBusy}
+                onclick={confirmManualMedicine}
+            >
+                Confirm and analyse
+                <ArrowRight size={16}/>
+            </button>
+        </div>
+    {:else if manualMatch && !manualMatch.matched}
+        <div class="identity-result">
+            <b>No confident catalogue match</b>
+            <span>{manualMatch.message}</span>
+        </div>
+    {/if}
+</div>
     <div class="panel scanner-panel"><div class="panel-title"><span class="panel-icon"><ScanLine size={19}/></span><div><h3>02. Review extracted text</h3><p>Correct any OCR mistakes before analysis.</p></div><span class="panel-step">STEP 02</span></div><textarea class="ocr-input" bind:value={ocrText} oninput={()=>{identity=null;matchConfirmed=false;report=null;}} placeholder="Extracted medicine label text will appear here. You can also type or correct it manually…" rows="5"></textarea><div class="field-hint">OCR can misread small print, symbols and ingredient names. Your review is important.</div><button class="btn btn-outline identify-btn" disabled={busy || ocrText.trim().length<2} onclick={identify}>Find possible medicine match</button>{#if identity}<div class="identity-result"><b>{identity.matched ? identity.medicine.name : "No confident medicine match"}</b><span>{identity.matched ? `Similarity score: ${Math.round(identity.confidence*100)}% — suggestion only` : identity.message}</span>{#if identity.matched}<label class="confirm-check"><input type="checkbox" bind:checked={matchConfirmed}/> I reviewed the label and confirm this suggested medicine.</label>{/if}</div>{/if}</div>
     <div class="panel scanner-panel"><div class="panel-title"><span class="panel-icon"><HeartPulse size={19}/></span><div><h3>03. Add health context</h3><p>Enter only the information relevant to this review.</p></div><span class="panel-step">STEP 03</span></div><div class="form-grid"><label>Health conditions <span>(comma separated)</span><input bind:value={conditions} placeholder="e.g. diabetes, hypertension"/></label><label>Current medications <span>(comma separated)</span><input bind:value={medications} placeholder="e.g. insulin, metformin"/></label><label class="full-field">Known allergies <span>(optional)</span><input bind:value={allergies} placeholder="e.g. penicillin"/></label></div><button class="btn btn-teal analyse-btn" disabled={busy || !identity || (identity.matched && !matchConfirmed)} onclick={analyse}>{#if busy}<span class="spinner"></span> Analysing…{:else}<Sparkles size={17}/> Analyse medicine <ArrowRight size={16}/>{/if}</button>{#if message}<p class="status-message" role="status">{message}</p>{/if}</div>
-    {#if report}<div class="panel report-panel"><div class="report-head"><div><div class="eyebrow">Your evidence summary</div><h3>Medicine information report</h3></div><button class="btn btn-outline" onclick={downloadPdf}><ClipboardList size={16}/> Download PDF</button></div><div class="report-medicine"><span class="report-pill"><Pill size={20}/></span><div><small>LOCAL CATALOGUE MATCH</small><h4>{report.medicine_name}</h4><p>Similarity: {Math.round((report.match?.confidence || 0)*100)}% · {report.match_confirmed ? "User confirmed" : "Not confirmed — ingredient checks withheld"}</p>{#if report.medicine_source}<a class="source-link" href={report.medicine_source} target="_blank" rel="noreferrer">Open medicine reference ↗</a>{/if}</div></div><div class="report-block"><h4>Other extracted label details</h4><p><b>Strengths detected:</b> {report.extracted_fields.strengths.join(", ") || "Not detected"}</p><p><b>Manufacturer line:</b> {report.extracted_fields.manufacturer_line || "Not detected"}</p><p><b>Other ingredient lines:</b> {report.extracted_fields.other_ingredient_lines.join("; ") || "Not detected"}</p><p>These are OCR/text-pattern extractions and are not independently verified.</p></div><div class="report-block"><h4>Health context supplied</h4><p><b>Conditions:</b> {report.conditions.join(", ") || "Not entered"}</p><p><b>Current medicines:</b> {report.medications.join(", ") || "Not entered"}</p><p><b>Allergies:</b> {report.allergies.join(", ") || "Not entered"}</p><p>Allergy matching is not included in this small reference dataset.</p></div><div class="report-block"><h4>Matched ingredients</h4>{#if report.ingredients.length}<div class="tag-list">{#each report.ingredients as ing}<span>{ing}</span>{/each}</div>{:else}<p>No ingredients confirmed by the local catalogue.</p>{/if}</div><div class="report-block"><h4>Condition-related precautions</h4>{#if report.precautions.length}{#each report.precautions as item}<div class="finding"><b>{item.ingredient} · {item.condition}</b><p>{item.finding}</p><a href={item.source} target="_blank" rel="noreferrer">View source ↗</a></div>{/each}{:else}<p>No matching precaution record was found in the included local dataset. This is not evidence that no precaution exists.</p>{/if}</div><div class="report-block"><h4>Medication interaction screen</h4><p>{report.interactions.message}</p>{#each report.interactions.findings as item}<div class="finding"><b>{item.ingredient_a} + {item.ingredient_b}</b><p>{item.finding}</p><a href={item.source} target="_blank" rel="noreferrer">View source ↗</a></div>{/each}</div><div class="report-block"><h4>Retrieved evidence</h4>{#if report.evidence.length}{#each report.evidence as ev}<div class="evidence-row"><b>{ev.source}</b><span>{ev.method} · relevance {ev.score}</span><p>{ev.text}</p></div>{/each}{:else}<p>No relevant passage was retrieved from the local reference documents.</p>{/if}</div><div class="report-block"><h4>Agent mode</h4><p>{report.agent.mode}: {report.agent.answer}</p></div>{#if report.uncertainties.length}<div class="uncertainty"><b><ShieldCheck size={16}/> Uncertainty to review</b>{#each report.uncertainties as u}<p>{u}</p>{/each}</div>{/if}<div class="disclaimer"><b>Medical safety note</b><p>{report.disclaimer} Never start, stop or change a medicine based on this report.</p></div></div>{/if}
+    {#if report}<div class="panel report-panel"><div class="report-head"><div><div class="eyebrow">Your evidence summary</div><h3>Medicine information report</h3></div><button class="btn btn-outline" onclick={downloadPdf}><ClipboardList size={16}/> Download PDF</button></div><div class="report-medicine"><span class="report-pill"><Pill size={20}/></span><div><small>LOCAL CATALOGUE MATCH</small><h4>{report.medicine_name}</h4><p>Similarity: {Math.round((report.match?.confidence || 0)*100)}% · {report.match_confirmed ? "User confirmed" : "Not confirmed — ingredient checks withheld"}</p>{#if report.medicine_source}<a class="source-link" href={report.medicine_source} target="_blank" rel="noreferrer">Open medicine reference ↗</a>{/if}</div></div><div class="report-block"><h4>Other extracted label details</h4><p><b>Strengths detected:</b> {report.extracted_fields?.strengths?.join(", ") || "Not available for manual search"}</p><p><b>Manufacturer line:</b> {report.extracted_fields?.manufacturer_line || "Not available for manual search"}</p><p><b>Other ingredient lines:</b> {report.extracted_fields?.other_ingredient_lines?.join("; ") || "Not available for manual search"}</p><p>These are OCR/text-pattern extractions and are not independently verified.</p></div><div class="report-block"><h4>Health context supplied</h4><p><b>Conditions:</b> {report.conditions?.join(", ") || "Not entered"}</p><p><b>Current medicines:</b> {report.medications?.join(", ") || "Not entered"}</p><p><b>Allergies:</b> {report.allergies?.join(", ") || "Not entered"}</p><p>Allergy matching is not included in this small reference dataset.</p></div><div class="report-block"><h4>Matched ingredients</h4>{#if report.ingredients?.length}<div class="tag-list">{#each report.ingredients as ing}<span>{ing}</span>{/each}</div>{:else}<p>No ingredients confirmed by the local catalogue.</p>{/if}</div><div class="report-block"><h4>Dynamic ingredient information</h4>
+{#if report.ingredient_information?.length}
+  {#each report.ingredient_information as item}
+    <div class="evidence-row">
+      <b>{item.ingredient}</b>
+      <p><b>PubChem compound description</b></p>
+      {#if item.pubchem?.descriptions?.length}
+        {#each item.pubchem.descriptions as description}
+          <p>{description}</p>
+        {/each}
+      {:else}
+        <p>No PubChem description was retrieved.</p>
+      {/if}
+      <p><b>openFDA drug-label information</b></p>
+      {#if item.openfda?.labels?.length}
+        {#each item.openfda.labels as label}
+          <p><b>Label effective date:</b> {label.effective_time || "Not supplied"}</p>
+          {#each Object.entries(label.sections || {}) as section}
+            <p>
+              <b>{section[0].replaceAll("_", " ")}:</b>
+              {Array.isArray(section[1]) ? section[1].join(" ") : section[1]}
+            </p>
+          {/each}
+        {/each}
+      {:else}
+        <p>No matching openFDA label was retrieved.</p>
+      {/if}
+      <p class="field-hint">
+        These external references may not describe the exact Indian brand,
+        strength or formulation.
+      </p>
+    </div>
+  {/each}
+{:else}
+  <p>No dynamic ingredient information was retrieved.</p>
+{/if}
+</div><div class="report-block"><h4>Condition-related precautions</h4>{#if report.precautions?.length}{#each report.precautions as item}<div class="finding"><b>{item.ingredient} · {item.condition}</b><p>{item.finding}</p><a href={item.source} target="_blank" rel="noreferrer">View source ↗</a></div>{/each}{:else}<p>No matching precaution record was found in the included local dataset. This is not evidence that no precaution exists.</p>{/if}</div><div class="report-block"><h4>Medication interaction screen</h4><p>{report.interactions?.message || "No interaction result was returned."}</p>{#each (report.interactions?.findings || []) as item}<div class="finding"><b>{item.ingredient_a} + {item.ingredient_b}</b><p>{item.finding}</p><a href={item.source} target="_blank" rel="noreferrer">View source ↗</a></div>{/each}</div><div class="report-block"><h4>Retrieved evidence</h4>{#if report.evidence?.length}{#each report.evidence as ev}<div class="evidence-row"><b>{ev.source}</b><span>{ev.method} · relevance {ev.score}</span><p>{ev.text}</p></div>{/each}{:else}<p>No relevant passage was retrieved from the local reference documents.</p>{/if}</div><div class="report-block"><h4>Agent mode</h4><p>{report.agent.mode}: {report.agent.answer}</p></div>{#if report.uncertainties?.length}<div class="uncertainty"><b><ShieldCheck size={16}/> Uncertainty to review</b>{#each report.uncertainties as u}<p>{u}</p>{/each}</div>{/if}<div class="disclaimer"><b>Medical safety note</b><p>{report.disclaimer} Never start, stop or change a medicine based on this report.</p></div></div>{/if}
   </div><aside class="scanner-aside"><div class="aside-card aside-dark"><span class="aside-icon"><ShieldCheck size={21}/></span><h3>Evidence before answers.</h3><p>We show the source behind a finding and leave gaps visible. No match does not mean no risk.</p><div class="aside-stat"><b>01</b><span>Review every result</span></div><div class="aside-stat"><b>02</b><span>Check the exact product label</span></div><div class="aside-stat"><b>03</b><span>Ask a qualified professional</span></div></div><div class="aside-card"><div class="aside-mini-icon"><Zap size={19}/></div><h3>Built for learning</h3><p>Explore how OCR, retrieval and tool-using agents can work together in a practical AI Engineering project.</p></div><div class="aside-card aside-note"><b>Prototype limitation</b><p>The included local catalogue is small and not a complete drug database. It is not a substitute for professional advice.</p></div></aside></div></div></section>
   <section id="about" class="section about-section"><div class="shell about-layout"><div class="about-art"><div class="about-circle"><div class="about-cross">+</div><div class="about-orbit orbit-x"></div><div class="about-orbit orbit-y"></div><div class="about-label">AI + HEALTH INFORMATION</div></div><div class="about-sticker"><Sparkles size={16}/> Clarity through context</div></div><div class="about-copy"><div class="eyebrow">Why MedLens AI?</div><h2>Making medicine information <em>easier to explore.</em></h2><p>Medicine packaging can contain dense ingredient lists and important warnings. MedLens AI is an educational prototype that brings OCR, structured reference data and retrieval into one review workflow.</p><p>OCR extracts text, a local catalogue suggests possible matches, deterministic checks compare known records, and RAG retrieves relevant passages. An optional agent can coordinate tools to produce a grounded explanation.</p><a class="text-link" href="#scanner">Explore the scanner <ArrowRight size={17}/></a></div></div></section>
   <section id="technology" class="section tech-section"><div class="shell"><div class="section-heading"><div class="eyebrow">Under the hood</div><h2>Technology with <em>purpose.</em></h2><p>A modular architecture keeps each stage understandable, testable and replaceable.</p></div><div class="tech-pills"><span>Python</span><span>FastAPI</span><span>EasyOCR</span><span>LangChain</span><span>create_agent</span><span>Sentence Transformers</span><span>FAISS</span><span>Pandas</span><span>SvelteKit</span><span>REST API</span></div><div class="architecture"><div class="arch-box"><ScanLine/><b>Image + OCR</b><small>EasyOCR / Pillow</small></div><ArrowRight class="arch-arrow"/><div class="arch-box"><Pill/><b>Structured checks</b><small>CSV + Python</small></div><ArrowRight class="arch-arrow"/><div class="arch-box"><Microscope/><b>Evidence retrieval</b><small>Embeddings + FAISS</small></div><ArrowRight class="arch-arrow"/><div class="arch-box"><Sparkles/><b>Agent coordinator</b><small>LangChain tools</small></div></div></div></section>
